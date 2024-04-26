@@ -1,11 +1,10 @@
 import pkg from '@apollo/client';
+import { YogaLink } from '@graphql-yoga/apollo-link';
 import fetch from 'cross-fetch';
 import dotenv from 'dotenv';
 import gql from 'graphql-tag';
-import { createClient } from 'graphql-ws';
-import ws from 'ws';
 
-const { ApolloClient, ApolloLink, HttpLink, InMemoryCache, Observable } = pkg;
+const { ApolloClient, HttpLink, InMemoryCache } = pkg;
 
 const expect = (value) => {
   return {
@@ -26,40 +25,6 @@ const createPromiseSignal = () => {
   return [resolveFunction, promise];
 };
 
-// prettier-ignore
-class GraphQLWsLink extends ApolloLink {
-  constructor(url) {
-    super();
-    this.client = createClient({ url, webSocketImpl: ws });
-  }
-  request(operation) {
-    return new Observable((observer) => {
-      const { query, variables } = operation;
-      const dispose = this.client.subscribe(
-        {
-          query: query.loc?.source.body || '',
-          variables,
-        },
-        {
-          next: (data) => observer.next(data),
-          error: (err) => observer.error(err.reason ? new Error(err.reason) : err),
-          complete: () => observer.complete(),
-        }
-      );
-
-      return () => {
-        dispose();
-      };
-    });
-  }
-  onConnected(callback) {
-    this.client.on('connected', callback);
-  }
-  async close() {
-    await this.client.dispose();
-  }
-}
-
 dotenv.config();
 
 const httpUri = `http://localhost:${process.env.PORT}/graphql`;
@@ -73,17 +38,12 @@ const messageContent = 'Hello World!';
 const messageSender = 'Bill Gates';
 
 try {
-  const wsLink = new GraphQLWsLink(httpUri.replace(/^http:\/\//, 'ws://'));
+  const wsLink = new YogaLink({ endpoint: httpUri });
 
   client1 = new ApolloClient({
     link: wsLink,
     cache: new InMemoryCache(),
   });
-
-  // prettier-ignore
-  const [wsLinkConnectionResolve, wsLinkConnectionPromise] = createPromiseSignal();
-
-  wsLink.onConnected(wsLinkConnectionResolve);
 
   const observer = client1.subscribe({
     query: gql`
@@ -107,8 +67,6 @@ try {
       subscriptionResolve();
     },
   });
-
-  await wsLinkConnectionPromise;
 
   client2 = new ApolloClient({
     link: new HttpLink({

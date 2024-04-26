@@ -1,15 +1,10 @@
-import { ApolloServer } from '@apollo/server';
-import { expressMiddleware } from '@apollo/server/express4';
-import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import express from 'express';
 import { PubSub } from 'graphql-subscriptions';
 import { gql } from 'graphql-tag';
-import { useServer } from 'graphql-ws/lib/use/ws';
+import { createYoga } from 'graphql-yoga';
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
 
 dotenv.config();
 
@@ -59,37 +54,11 @@ const resolvers = {
 
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 
-const wsServer = new WebSocketServer({
-  server: httpServer,
-  path: '/graphql',
-});
-
-const serverCleanup = useServer({ schema }, wsServer);
-
-const server = new ApolloServer({
+const yoga = createYoga({
   schema,
-  introspection: true,
-  plugins: [
-    ApolloServerPluginDrainHttpServer({ httpServer }),
-    {
-      async serverWillStart() {
-        return {
-          async drainServer() {
-            await serverCleanup.dispose();
-          },
-        };
-      },
-    },
-  ],
 });
 
-await server.start();
-
-app.use(
-  '/graphql',
-  bodyParser.json(),
-  expressMiddleware(server)
-);
+app.use('/graphql', yoga);
 
 const PORT = process.env.PORT;
 httpServer.listen(PORT, () => {
